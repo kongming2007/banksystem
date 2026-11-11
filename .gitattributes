@@ -1,0 +1,2 @@
+# Giữ LF ở mọi hệ điều hành để Checkstyle/test không lệch giữa Windows và Linux
+* text=auto eol=lf
