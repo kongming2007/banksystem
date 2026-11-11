@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    name: Build and test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # Không hủy các OS còn lại khi một OS fail, để quan sát lỗi trên từng OS
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    # Dùng bash ở cả 3 OS để cùng một cú pháp lệnh
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      # Vòng đời Maven: validate (Checkstyle) -> compile -> test
+      - name: Run unit tests
+        run: mvn -B test
+
+      - name: Package JAR
+        run: mvn -B package -DskipTests
+
+      # Tên artifact phải khác nhau giữa các OS, nếu trùng sẽ bị lỗi
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bank-system-jar-${{ matrix.os }}
+          path: target/*.jar
+          if-no-files-found: error
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports-${{ matrix.os }}
+          path: target/surefire-reports/
+          if-no-files-found: ignore
