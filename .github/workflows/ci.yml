@@ -2,7 +2,9 @@ name: CI
 
 on:
   push:
+  # Bài 7: tự động chạy khi có Pull Request hướng vào nhánh main
   pull_request:
+    branches: [main]
 
 jobs:
   build:
@@ -35,8 +37,11 @@ jobs:
       - name: Run unit tests
         run: mvn -B test
 
-      - name: Package JAR
-        run: mvn -B package -DskipTests
+      # verify = ... -> test -> package -> verify.
+      # Ở pha verify, JaCoCo tạo báo cáo và kiểm tra luật bao phủ >= 80%;
+      # nếu thấp hơn, bước này fail và cả job đỏ.
+      - name: Package and verify coverage (>= 80%)
+        run: mvn -B verify
 
       # Tên artifact phải khác nhau giữa các OS, nếu trùng sẽ bị lỗi
       - name: Upload JAR artifact
@@ -46,6 +51,15 @@ jobs:
           path: target/*.jar
           if-no-files-found: error
 
+      # if: always() để vẫn lưu báo cáo bao phủ kể cả khi luật 80% làm build fail
+      - name: Upload JaCoCo coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report-${{ matrix.os }}
+          path: target/site/jacoco/
+          if-no-files-found: warn
+
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -53,3 +67,27 @@ jobs:
           name: surefire-reports-${{ matrix.os }}
           path: target/surefire-reports/
           if-no-files-found: ignore
+
+  # Bài 7: "người review" tự động. Bình luận trực tiếp lên từng dòng code vi phạm
+  # Checkstyle ngay trong Pull Request.
+  checkstyle-review:
+    name: Checkstyle inline review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # cần để bot đăng review comment
+      checks: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Run Checkstyle and comment on PR (reviewdog)
+        uses: dbelyaev/action-checkstyle@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-review        # đăng comment inline lên đúng dòng code
+          checkstyle_config: google_checks.xml
+          checkstyle_version: '10.20.1'     # trùng phiên bản trong pom.xml
+          level: warning
